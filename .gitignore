@@ -1,0 +1,7 @@
+/data
+/.idea/
+/error_logger.log
+/logger.log
+/bin/__pycache__/
+/BDCSim/__pycache__/
+/__pycache__
