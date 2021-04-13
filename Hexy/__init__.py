@@ -11,6 +11,7 @@ output_csv_path = r"./data/output/csv"
 geo_json = r"./data/output/csv/geojson"
 out_json = r"./data/output/csv/json"
 input_json = r"./data/input/json"
+input_gpkg = r"./data/output/gpkg"
 
 if not os.path.exists(input_path):
     os.mkdir(input_path)
@@ -32,9 +33,9 @@ if not os.path.exists(out_json):
 if not os.path.exists(input_json):
     os.mkdir(input_json)
 
-# if not os.path.exists('my_paths.py'):
-#     print("PLEASE CREATE A PYTHON FILE CALLED: my_paths.py\n"
-#           "create path object for:"
-#           "\nXY_tests=''"
-#           "\nblock_groups=''")
-#     exit()
+if not os.path.exists(input_gpkg):
+    os.mkdir(input_gpkg)
+
+if not os.path.exists('my_paths.py'):
+    print("PLEASE CREATE A PYTHON FILE CALLED: my_paths.py\n")
+    exit()

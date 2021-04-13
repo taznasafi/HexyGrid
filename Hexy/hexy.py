@@ -14,6 +14,7 @@ import cenpy
 from decorator import *
 
 class HexyMaker:
+
     base_input_folder, base_output_folder = int_paths.input_path, int_paths.output_path
     gdb_output_dic = defaultdict(list)
     def __init__(self, in_gdb_path=None, in_gdb_2_path=None, in_path=None, in_path2=None,
@@ -31,7 +32,12 @@ class HexyMaker:
     @logger.time_it()
     @logger.event_logger(logger.create_logger())
     def read_esri_fc(self, gdb_path, fc_name, driver='FileGDB'):
-
+        """
+        :param gdb_path: input esri gdb path
+        :param fc_name:  esri feature class name
+        :param driver: geopandas driver
+        :return: geopandas DataFrame
+        """
         if gdb_path.endswith(".gdb"):
 
             fc = gp.read_file(gdb_path,
@@ -43,6 +49,12 @@ class HexyMaker:
     @logger.time_it()
     @logger.event_logger(logger.create_logger())
     def geojson_to_geoPandas_df(self, in_geojson):
+        """
+        :param input geojason format
+        :return geopandas DataFrame
+
+        """
+
         if in_geojson.endswith('.geojson'):
             return gp.read_file(in_geojson)
         else:
@@ -50,30 +62,44 @@ class HexyMaker:
 
     @logger.time_it()
     @logger.event_logger(logger.create_logger())
-    def polyfill_from_geoJson_extent(self, df, resolution, export_hex=False, geo_json_output_path=None, export_child=None, export_geopackage=False, layer_name=None):
+    def polyfill_from_geoJson_extent(self, df, parent_resolution, export_hex=False, geo_json_output_path=None, export_child=None, export_geopackage=False, layer_name=None):
+        #todo: check the projection, the child projection seems to be right but not the parent, the parent hex are distorted.
+        """
+
+        :param df: input geopandas Dataframe
+        :param parent_resolution: H3 Hex resolution
+        :param export_hex: boolean, if you want to export the hexs
+        :param geo_json_output_path: output of h3 geojson
+        :param export_child: boolean, if you want to export the child of resolution
+        :param export_geopackage: boolean, if you want to export to geopackage
+        :param layer_name: the name of the layer that you want to export
+
+        """
+
 
         bbox = box(*df.total_bounds)
 
-        hexs = h3.polyfill(bbox.__geo_interface__, resolution, geo_json_conformant=False)
+
+        hexs = h3.polyfill(bbox.__geo_interface__, parent_resolution, geo_json_conformant=True)
 
         polygonise = lambda hex_id: Polygon(
             h3.h3_to_geo_boundary(
                 hex_id, geo_json=True)
         )
 
-        all_polys = gp.GeoDataFrame({"geometry": gp.GeoSeries(list(map(polygonise, hexs)), index=hexs, crs="EPSG:4326")}).reset_index()
+        all_polys = gp.GeoSeries(list(map(polygonise, hexs)), index=hexs, crs="EPSG:4326")
 
 
         #print(all_polys)
 
         if export_hex is True and geo_json_output_path is not None:
-            all_polys.to_file(geo_json_output_path+"_{}.json".format(resolution), driver='GeoJSON')
+            all_polys.to_file(geo_json_output_path +"_{}.json".format(parent_resolution), driver='GeoJSON')
 
         if export_hex is True and export_geopackage is True and layer_name is not None:
-            all_polys.to_file(os.path.join(self.out_gdb, 'H3_hexy.gpkg'), layer="{}_res_{}".format(layer_name,resolution), driver='GPKG' )
+            all_polys.to_file(os.path.join(self.out_gdb, '{}_H3_hexy.gpkg'.format(layer_name)), layer="{}_res_{}".format(layer_name, parent_resolution), driver='GPKG')
 
         if export_child:
-            child_res = resolution+1
+            child_res = parent_resolution + 1
 
             hexs = h3.polyfill(bbox.__geo_interface__, child_res , geo_json_conformant=True)
 
@@ -82,16 +108,73 @@ class HexyMaker:
                     hex_id, geo_json=True)
             )
 
-            all_polys = gp.GeoDataFrame({"geometry": gp.GeoSeries(list(map(polygonise, hexs)), index=hexs, crs="EPSG:4326")}).reset_index()
+            all_polys = gp.GeoSeries(list(map(polygonise, hexs)), index=hexs, crs="EPSG:4326")
 
             if export_hex is True and geo_json_output_path is not None:
                 all_polys.to_file(geo_json_output_path + "_{}.json".format(child_res), driver='GeoJSON')
 
             if export_hex is True and export_geopackage is True and layer_name is not None:
-                all_polys.to_file(os.path.join(self.out_gdb, 'H3_hexy.gpkg'),
+                all_polys.to_file(os.path.join(self.out_gdb, '{}_H3_hexy.gpkg'.format(layer_name)),
                                   layer="{}_res_{}".format(layer_name,child_res),
                                   driver='GPKG')
 
+    @logger.time_it()
+    @logger.event_logger(logger.create_logger())
+    def polyfill_from_polyon(self, polygon, parent_resolution, export_hex=False, geo_json_output_path=None,
+                                     export_child=None, export_geopackage=False, layer_name=None):
+
+        """
+
+        :param df: input geopandas Dataframe
+        :param parent_resolution: H3 Hex resolution
+        :param export_hex: boolean, if you want to export the hexs
+        :param geo_json_output_path: output of h3 geojson
+        :param export_child: boolean, if you want to export the child of resolution
+        :param export_geopackage: boolean, if you want to export to geopackage
+        :param layer_name: the name of the layer that you want to export
+
+        """
+
+        polygon_buffer = polygon['geometry'].buffer(0.0000001)[0]
+        #print(polygon_buffer)
+
+        hexs = h3.polyfill(polygon_buffer.__geo_interface__, parent_resolution, geo_json_conformant=True)
+
+        polygonise = lambda hex_id: Polygon(
+            h3.h3_to_geo_boundary(
+                hex_id, geo_json=True)
+        )
+
+        all_polys = gp.GeoSeries(list(map(polygonise, hexs)), index=hexs, crs="EPSG:4326")
+
+        # print(all_polys)
+
+        if export_hex is True and geo_json_output_path is not None:
+            all_polys.to_file(geo_json_output_path + "_{}.json".format(parent_resolution), driver='GeoJSON')
+
+        if export_hex is True and export_geopackage is True and layer_name is not None:
+            all_polys.to_file(os.path.join(self.out_gdb, 'gpkg', '{}_H3_hexy.gpkg'.format(layer_name)),
+                              layer="{}_res_{}".format(layer_name, parent_resolution), driver='GPKG')
+
+        if export_child:
+            child_res = parent_resolution + 1
+
+            hexs = h3.polyfill(polygon_buffer.__geo_interface__, child_res, geo_json_conformant=True)
+
+            polygonise = lambda hex_id: Polygon(
+                h3.h3_to_geo_boundary(
+                    hex_id, geo_json=True)
+            )
+
+            all_polys = gp.GeoSeries(list(map(polygonise, hexs)), index=hexs, crs="EPSG:4326")
+
+            if export_hex is True and geo_json_output_path is not None:
+                all_polys.to_file(geo_json_output_path + "_{}.json".format(child_res), driver='GeoJSON')
+
+            if export_hex is True and export_geopackage is True and layer_name is not None:
+                all_polys.to_file(os.path.join(self.out_gdb, 'gpkg', '{}_H3_hexy.gpkg'.format(layer_name)),
+                                  layer="{}_res_{}".format(layer_name, child_res),
+                                  driver='GPKG')
 
     @logger.time_it()
     @logger.event_logger(logger.create_logger())
@@ -103,12 +186,38 @@ class HexyMaker:
 
     @logger.time_it()
     @logger.event_logger(logger.create_logger())
+    def get_child__to_parent_hex_dictionary(self, df, child, output_name=None, output_json=False):
+        """
+
+        :param df: input geopandas geodataframe
+        :param parent_resolution: the parent h3 resolution
+        :param output_name: json dictionary name
+        :param output_json: boolean, if you want to output to json file format
+        :return: hex dictionary {"parent_hex_id": ["child_hex_id"]}
+        """
+
+        # parent_hex = list(h3.h3_to_parent(child_hex_id, child - 1))
+        pass
+
+
+
+    @logger.time_it()
+    @logger.event_logger(logger.create_logger())
     def get_parent_and_child_hex_dictionary(self, df, parent_resolution, output_name=None, output_json=False):
+        """
+
+        :param df: input geopandas geodataframe
+        :param parent_resolution: the parent h3 resolution
+        :param output_name: json dictionary name
+        :param output_json: boolean, if you want to output to json file format
+        :return: hex dictionary {"parent_hex_id": ["child_hex_id"]}
+        """
+
         hex_dict = defaultdict(list)
         bbox = box(*df.total_bounds)
-        parent_hexs = h3.polyfill(bbox.__geo_interface__, parent_resolution, geo_json_conformant=True)
+        parent_hexs_list = h3.polyfill(bbox.__geo_interface__, parent_resolution, geo_json_conformant=True)
 
-        for parent in parent_hexs:
+        for parent in parent_hexs_list:
             child_hex = list(h3.h3_to_children(parent, parent_resolution+1))
             hex_dict[parent].append(child_hex)
 
@@ -117,13 +226,19 @@ class HexyMaker:
             with open(output, 'w') as out_json:
                 json.dump(hex_dict, out_json)
             print("outfile: ", output)
-            #print(hex_dict)
+
 
         return hex_dict
 
     @logger.time_it()
     @logger.event_logger(logger.create_logger())
     def save_json(self, python_dictionary, output_path):
+        """
+
+        :param python_dictionary: python dictionary object
+        :param output_path: output path
+
+        """
         with open(output_path, 'w') as fp:
             json.dump(python_dictionary, fp, indent=4)
         print("saved file to : {}".format(output_path))
@@ -131,18 +246,35 @@ class HexyMaker:
     @logger.time_it()
     @logger.event_logger(logger.create_logger())
     def create_map(self, in_gp_df, color="yellow", layer_trans=0.25):
+        """
+
+        :param in_gp_df: input geodataframe
+        :param color: the color of the layer
+        :param layer_trans: layer transparency
+        :return: matplotlib static map
+        """
 
         ax = in_gp_df.plot(alpha=layer_trans, color=color)
         return ctx.add_basemap(ax, crs=in_gp_df.crs.to_string())
 
     @logger.time_it()
     @logger.event_logger(logger.create_logger())
-    def create_spatial_index(self, in_GeoSieries):
-        return in_GeoSieries.sindex
+    def create_spatial_index(self, in_GeoSeries):
+        """
+
+        :param in_GeoSeries: input geoseries
+        :return: R-Tree spatial index
+        """
+        return in_GeoSeries.sindex
 
     @logger.time_it()
     @logger.event_logger(logger.create_logger())
-    def create_roads_in_child_hex(self):
+    def cal_pct_of_child_with_roads_for_parent_hexs(self):
+        """
+        This function creates pct of child hexs for the parent hex. This function is linear,
+        state by state. Might take long time to complete.
+
+        """
         import warnings
         warnings.filterwarnings("ignore")
 
@@ -197,7 +329,10 @@ class HexyMaker:
 
                             # delete spatial index to free up memory.
                             del spatial_index
+                            # get possible matches of the road dataframe and drop the none intersecting features
                             possible_matches = road_df.iloc[possible_matches_index]
+
+
                             precise_matches = possible_matches[possible_matches.intersects(c[0])]
 
                             #print(precise_matches)
@@ -217,7 +352,7 @@ class HexyMaker:
 
     @logger.time_it()
     @logger.event_logger(logger.create_logger())
-    def create_roads_in_child_hex_by_state(self, state):
+    def cal_pct_of_child_with_roads_for_parent_hexs_by_state(self, state):
         import warnings
         warnings.filterwarnings("ignore")
 
@@ -253,7 +388,7 @@ class HexyMaker:
                     # print(parent)
                     child_counter = 0
                     for child in children_list[0]:
-                        # print(child)
+                        child_dict = {}
                         c = [Polygon(h3.h3_to_geo_boundary(child, geo_json=True))]
 
                         child_df = gp.GeoDataFrame(
@@ -276,10 +411,11 @@ class HexyMaker:
                         if len(precise_matches) > 0:
                             # print("intersect")
                             child_counter += 1
+
                         else:
                             pass
 
-                    nested_master_dict[road].append({parent: {'pct_child_with_road': child_counter / 7}})
+                    nested_master_dict[road].append({parent: {'number_childs_with_roads': child_counter }})
 
                     # print(dict(nested_master_dict))
                 print("\t\tsaving Json file")

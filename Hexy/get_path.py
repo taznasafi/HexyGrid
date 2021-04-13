@@ -6,6 +6,7 @@ from enum import Enum
 from collections import defaultdict
 import re
 
+
 class pathFinder:
 
 
@@ -65,12 +66,12 @@ class pathFinder:
 
         else:
             return list(file_loc)
-
+    r"\n\t"
     @classmethod
     # create a list of fips from the table.
     def make_fips_list(cls):
         import pandas as pd
-        Fips_table_path = r"D:\FCC_GIS_Projects\MFII\csv\state FiPS.txt"
+        Fips_table_path = r"./state_FIPS.txt"
         data = pd.read_csv(Fips_table_path, sep='|')
         data["STATE"] = data["STATE"].astype(str)
         data['STATE'] = data["STATE"].apply(lambda x: x.zfill(2))
